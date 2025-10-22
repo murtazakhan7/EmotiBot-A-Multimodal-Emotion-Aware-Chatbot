@@ -1,0 +1,394 @@
+# EmotiBot - Developer Quick Reference Card
+
+## 🚀 One-Command Setup
+
+```python
+# Mount Drive
+from google.colab import drive
+drive.mount('/content/drive')
+
+# Install all dependencies
+!pip install -q transformers datasets accelerate peft pillow detoxify gradio bitsandbytes evaluate scikit-learn rouge_score opencv-python kaggle
+```
+
+## 📦 Model Loading Cheat Sheet
+
+```python
+# Text Emotion Classifier (DistilBERT)
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+
+text_tokenizer = AutoTokenizer.from_pretrained("path/to/distilbert_emotion_classifier")
+text_model = AutoModelForSequenceClassification.from_pretrained("path/to/distilbert_emotion_classifier")
+
+# Response Generator (Flan-T5 + LoRA)
+from transformers import AutoModelForSeq2SeqLM
+from peft import PeftModel
+
+base_model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-base")
+response_model = PeftModel.from_pretrained(base_model, "path/to/flan_t5_lora")
+
+# Image Emotion Classifier (ViT)
+from transformers import AutoImageProcessor, AutoModelForImageClassification
+
+image_processor = AutoImageProcessor.from_pretrained("path/to/vit_emotion_classifier")
+image_model = AutoModelForImageClassification.from_pretrained("path/to/vit_emotion_classifier")
+```
+
+## 🎯 Quick Inference
+
+### Text Emotion Detection
+```python
+def quick_text_emotion(text):
+    inputs = text_tokenizer(text, return_tensors="pt", truncation=True, max_length=128)
+    outputs = text_model(**inputs)
+    probs = torch.sigmoid(outputs.logits)[0]
+    
+    # Get top 3 emotions
+    top_indices = torch.topk(probs, 3).indices
+    emotions = [(labels[i], probs[i].item()) for i in top_indices]
+    return emotions
+```
+
+### Image Emotion Detection
+```python
+def quick_image_emotion(image_path):
+    from PIL import Image
+    
+    image = Image.open(image_path).convert('RGB')
+    inputs = image_processor(image, return_tensors="pt")
+    outputs = image_model(**inputs)
+    
+    pred_idx = outputs.logits.argmax(-1).item()
+    confidence = torch.softmax(outputs.logits, dim=-1)[0][pred_idx].item()
+    
+    return image_labels[pred_idx], confidence
+```
+
+### Response Generation
+```python
+def quick_response(emotion, text):
+    prompt = f"Respond with {emotion} to: {text}"
+    inputs = response_tokenizer(prompt, return_tensors="pt", max_length=128)
+    outputs = response_model.generate(**inputs, max_length=100)
+    return response_tokenizer.decode(outputs[0], skip_special_tokens=True)
+```
+
+## 🔧 Common Operations
+
+### Check GPU Memory
+```python
+import torch
+if torch.cuda.is_available():
+    print(f"GPU: {torch.cuda.get_device_name(0)}")
+    print(f"Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
+    print(f"Allocated: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
+```
+
+### Clear GPU Memory
+```python
+import gc
+torch.cuda.empty_cache()
+gc.collect()
+```
+
+### Save Checkpoint Mid-Training
+```python
+# During training
+trainer.save_model("checkpoint_epoch_N")
+```
+
+### Resume from Checkpoint
+```python
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=train_dataset,
+    resume_from_checkpoint="checkpoint_epoch_N"
+)
+```
+
+## 📊 Quick Evaluation
+
+### Text Model
+```python
+from sklearn.metrics import classification_report
+
+predictions = trainer.predict(test_dataset)
+pred_labels = (torch.sigmoid(torch.tensor(predictions.predictions)) > 0.5).int()
+true_labels = predictions.label_ids
+
+print(classification_report(true_labels, pred_labels, target_names=emotion_labels))
+```
+
+### Image Model
+```python
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
+
+predictions = trainer.predict(test_dataset)
+pred_labels = predictions.predictions.argmax(-1)
+true_labels = predictions.label_ids
+
+cm = confusion_matrix(true_labels, pred_labels)
+sns.heatmap(cm, annot=True, xticklabels=labels, yticklabels=labels)
+```
+
+## 🐛 Debug Commands
+
+### Check Dataset Structure
+```python
+print(f"Train size: {len(train_dataset)}")
+print(f"Sample: {train_dataset[0]}")
+print(f"Features: {train_dataset.features}")
+```
+
+### Verify Model Output Shape
+```python
+sample = train_dataset[0]
+inputs = {k: v.unsqueeze(0) for k, v in sample.items() if k != 'labels'}
+outputs = model(**inputs)
+print(f"Logits shape: {outputs.logits.shape}")  # Should be [1, num_labels]
+```
+
+### Test Single Batch
+```python
+from torch.utils.data import DataLoader
+
+loader = DataLoader(train_dataset, batch_size=4)
+batch = next(iter(loader))
+outputs = model(**batch)
+print(f"Loss: {outputs.loss.item()}")
+```
+
+## ⚡ Performance Optimization
+
+### Enable Mixed Precision
+```python
+training_args = TrainingArguments(
+    fp16=True,  # Faster training
+    fp16_opt_level="O1"
+)
+```
+
+### Reduce Memory Usage
+```python
+training_args = TrainingArguments(
+    per_device_train_batch_size=4,  # Smaller batches
+    gradient_accumulation_steps=4,  # Maintain effective batch size
+    gradient_checkpointing=True      # Trade compute for memory
+)
+```
+
+### Faster Data Loading
+```python
+training_args = TrainingArguments(
+    dataloader_num_workers=2,
+    dataloader_pin_memory=True
+)
+```
+
+## 📈 Monitoring
+
+### TensorBoard
+```python
+%load_ext tensorboard
+%tensorboard --logdir logs/
+```
+
+### Training Progress
+```python
+for log in trainer.state.log_history:
+    if 'loss' in log:
+        print(f"Step {log['step']}: Loss = {log['loss']:.4f}")
+```
+
+## 🎨 Visualization Snippets
+
+### Plot Training Loss
+```python
+import matplotlib.pyplot as plt
+
+history = trainer.state.log_history
+train_loss = [x['loss'] for x in history if 'loss' in x]
+steps = [x['step'] for x in history if 'loss' in x]
+
+plt.plot(steps, train_loss)
+plt.xlabel('Steps')
+plt.ylabel('Loss')
+plt.title('Training Loss')
+plt.show()
+```
+
+### Show Sample Predictions
+```python
+import random
+from PIL import Image
+
+samples = random.sample(range(len(test_dataset)), 4)
+fig, axes = plt.subplots(2, 2, figsize=(10, 10))
+
+for idx, ax in zip(samples, axes.flatten()):
+    # Get prediction
+    image_path = test_dataset[idx]['image_path']
+    true_label = test_dataset[idx]['label']
+    
+    pred_emotion, confidence = quick_image_emotion(image_path)
+    
+    # Display
+    img = Image.open(image_path)
+    ax.imshow(img)
+    ax.set_title(f"True: {labels[true_label]}\nPred: {pred_emotion} ({confidence:.2f})")
+    ax.axis('off')
+
+plt.tight_layout()
+plt.show()
+```
+
+## 🔐 Safety Checks
+
+### Toxicity Filter
+```python
+from detoxify import Detoxify
+
+toxicity_model = Detoxify('original')
+
+def is_safe(text, threshold=0.5):
+    scores = toxicity_model.predict(text)
+    return max(scores.values()) < threshold
+
+# Usage
+response = "Your generated response here"
+if not is_safe(response):
+    response = "I apologize, let me rephrase that..."
+```
+
+## 💾 Export for Production
+
+### Save Complete Pipeline
+```python
+# Create a single directory with all models
+import shutil
+
+production_dir = "emotibot_production"
+os.makedirs(production_dir, exist_ok=True)
+
+# Copy models
+shutil.copytree("distilbert_emotion_classifier", f"{production_dir}/text_emotion")
+shutil.copytree("flan_t5_lora_emotion_response", f"{production_dir}/response_gen")
+shutil.copytree("vit_emotion_classifier", f"{production_dir}/image_emotion")
+
+# Save config
+config = {
+    "text_emotion_path": "text_emotion",
+    "response_gen_path": "response_gen",
+    "image_emotion_path": "image_emotion",
+    "version": "1.0.0"
+}
+
+import json
+with open(f"{production_dir}/config.json", 'w') as f:
+    json.dump(config, f, indent=2)
+```
+
+### Quantize Models (INT8)
+```python
+from transformers import AutoModelForSequenceClassification
+import torch
+
+# Load model
+model = AutoModelForSequenceClassification.from_pretrained("path/to/model")
+
+# Quantize
+model_int8 = torch.quantization.quantize_dynamic(
+    model, {torch.nn.Linear}, dtype=torch.qint8
+)
+
+# Save
+model_int8.save_pretrained("path/to/quantized_model")
+```
+
+## 📱 API Integration Template
+
+### FastAPI Endpoint
+```python
+from fastapi import FastAPI, File, UploadFile
+from PIL import Image
+import io
+
+app = FastAPI()
+
+@app.post("/emotibot")
+async def emotibot_endpoint(
+    text: str,
+    image: UploadFile = File(None)
+):
+    # Load image if provided
+    img = None
+    if image:
+        contents = await image.read()
+        img = Image.open(io.BytesIO(contents))
+    
+    # Process through pipeline
+    result = emotibot_pipeline(text, img, verbose=False)
+    
+    return {
+        "response": result['response'],
+        "emotion": result['emotion_analysis']['fused_emotion']['primary_emotion'],
+        "confidence": result['emotion_analysis']['fused_emotion']['confidence']
+    }
+```
+
+## 🧪 Testing Utilities
+
+### Unit Test Template
+```python
+import unittest
+
+class TestEmotiBot(unittest.TestCase):
+    
+    def test_text_emotion_detection(self):
+        text = "I'm so happy!"
+        emotions = detect_text_emotion(text)
+        self.assertTrue(len(emotions) > 0)
+        self.assertIn('joy', [e['emotion'] for e in emotions])
+    
+    def test_response_generation(self):
+        response = generate_empathetic_response("joy", "I won the lottery!")
+        self.assertIsNotNone(response)
+        self.assertGreater(len(response), 10)
+    
+    def test_safety_filter(self):
+        toxic_text = "offensive content here"
+        check = check_toxicity(toxic_text)
+        self.assertTrue(check['is_toxic'])
+
+if __name__ == '__main__':
+    unittest.main()
+```
+
+## 📋 Troubleshooting Checklist
+
+- [ ] Models loaded on GPU (`model.device == 'cuda'`)
+- [ ] Input dimensions correct (check with `.shape`)
+- [ ] Tokenizer matches model
+- [ ] Labels match number of classes
+- [ ] Sufficient GPU memory available
+- [ ] Gradients not frozen (for trainable params)
+- [ ] Learning rate not too high/low
+- [ ] Data preprocessed correctly
+- [ ] No NaN values in data
+- [ ] Batch size fits in memory
+
+## 🔗 Essential URLs
+
+- **Transformers Docs**: https://huggingface.co/docs/transformers
+- **Datasets Hub**: https://huggingface.co/datasets
+- **PEFT Guide**: https://huggingface.co/docs/peft
+- **Gradio Docs**: https://gradio.app/docs
+- **Colab Tips**: https://colab.research.google.com/notebooks/basic_features_overview.ipynb
+
+---
+
+**Pro Tip**: Save this reference card to your Drive for quick access during development!
+
+**Need Help?** Check the main README.md or USAGE_GUIDE.md for detailed explanations.
