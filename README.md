@@ -591,9 +591,9 @@ If you use EmotiBot in your research, please cite:
 ```bibtex
 @software{emotibot2025,
   title={EmotiBot: A Multimodal Emotion-Aware Chatbot},
-  author={Your Name},
+  author={Muhammad Murtaza},
   year={2025},
-  url={https://github.com/yourusername/emotibot}
+  url={https://github.com/murtazakhan7/EmotiBot-A-Multimodal-Emotion-Aware-Chatbot}
 }
 ```
 
@@ -641,9 +641,8 @@ If you use EmotiBot in your research, please cite:
 
 For questions, issues, or suggestions:
 
-- **GitHub Issues**: [Create an issue](https://github.com/yourusername/emotibot/issues)
-- **Email**: your.email@example.com
-- **Documentation**: See `USAGE_GUIDE.md` for detailed instructions
+- **Email**: murtazamuhammad508@gmail.com
+- **Documentation**: See `developerguide` for detailed instructions
 
 ## 🌐 Resources
 
